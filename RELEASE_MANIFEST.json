@@ -1,0 +1,9 @@
+{
+  "project": "Vimium for macOS",
+  "author": "Devesh Raghuwanshi (ildevesh)",
+  "copyright_year": 2026,
+  "license": "MIT",
+  "notes": "System-wide Vimium-style macOS keyboard layer using Karabiner-Elements and Hammerspoon.",
+  "knowledge_file": "knowledge.md",
+  "release_state": "Current tested configuration as of 2026-09-25"
+}
