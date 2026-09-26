@@ -76,6 +76,8 @@ local commandPalette = nil
 local activeApp = nil
 local baseChoices = {}
 local finderFileChoices = {}
+local browserBookmarkChoices = {}
+local browserHistoryChoices = {}
 
 
 --------------------------------------------------
@@ -418,6 +420,725 @@ local function shellQuote(path)
 end
 
 
+
+--------------------------------------------------
+-- Browser history / bookmarks
+--------------------------------------------------
+
+local function getSupportedBrowserBundleID(app)
+    if not app then
+        return nil
+    end
+
+    local bundleID = app:bundleID()
+
+    local supported = {
+        ["com.apple.Safari"] = true,
+        ["com.google.Chrome"] = true,
+        ["org.chromium.Chromium"] = true,
+        ["company.thebrowser.dia"] = true
+    }
+
+    if supported[bundleID] then
+        return bundleID
+    end
+
+    return nil
+end
+
+
+local function getBrowserName(bundleID)
+    local names = {
+        ["com.apple.Safari"] = "Safari",
+        ["com.google.Chrome"] = "Chrome",
+        ["org.chromium.Chromium"] = "Chromium",
+        ["company.thebrowser.dia"] = "Dia"
+    }
+
+    return names[bundleID] or "Browser"
+end
+
+
+local function getBrowserProfileFiles(bundleID)
+    local profiles = {}
+
+    --------------------------------------------------
+    -- Safari
+    --------------------------------------------------
+
+    if bundleID == "com.apple.Safari" then
+        table.insert(
+            profiles,
+            {
+                name = "Safari",
+                bookmarks =
+                    (os.getenv("HOME") or "") ..
+                    "/Library/Safari/Bookmarks.plist",
+                history =
+                    (os.getenv("HOME") or "") ..
+                    "/Library/Safari/History.db"
+            }
+        )
+
+        return profiles
+    end
+
+
+    --------------------------------------------------
+    -- Chromium-based browsers
+    --------------------------------------------------
+
+    local basePaths = {
+        ["com.google.Chrome"] =
+            (os.getenv("HOME") or "") ..
+            "/Library/Application Support/Google/Chrome",
+
+        ["org.chromium.Chromium"] =
+            (os.getenv("HOME") or "") ..
+            "/Library/Application Support/Chromium",
+
+        ["company.thebrowser.dia"] =
+            (os.getenv("HOME") or "") ..
+            "/Library/Application Support/Dia/User Data"
+    }
+
+    local basePath = basePaths[bundleID]
+
+    if not basePath then
+        return profiles
+    end
+
+
+    --------------------------------------------------
+    -- Discover Default / Profile N directories.
+    -- This avoids assuming that the user only has
+    -- one browser profile.
+    --------------------------------------------------
+
+    local output =
+        hs.execute(
+            "/usr/bin/find "
+            .. shellQuote(basePath)
+            .. " -maxdepth 2 -type f "
+            .. "\\( -name Bookmarks -o -name History \\) "
+            .. "-print 2>/dev/null"
+        )
+
+
+    local byProfile = {}
+
+    for path in tostring(output or ""):gmatch("[^\r\n]+") do
+        local profileName =
+            path:match("/([^/]+)/Bookmarks$")
+            or path:match("/([^/]+)/History$")
+
+        if profileName then
+            if not byProfile[profileName] then
+                byProfile[profileName] = {
+                    name = profileName
+                }
+            end
+
+            if path:match("/Bookmarks$") then
+                byProfile[profileName].bookmarks = path
+            elseif path:match("/History$") then
+                byProfile[profileName].history = path
+            end
+        end
+    end
+
+
+    for profileName, profile in pairs(byProfile) do
+        table.insert(profiles, profile)
+    end
+
+
+    table.sort(
+        profiles,
+        function(a, b)
+            return a.name:lower() < b.name:lower()
+        end
+    )
+
+
+    return profiles
+end
+
+
+local function decodeBrowserJSON(path, plistMode)
+    if not path then
+        return nil
+    end
+
+    local command
+
+    if plistMode then
+        command =
+            "/usr/bin/plutil -convert json -o - -- "
+            .. shellQuote(path)
+            .. " 2>/dev/null"
+    else
+        command =
+            "/bin/cat "
+            .. shellQuote(path)
+            .. " 2>/dev/null"
+    end
+
+    local output =
+        hs.execute(command)
+
+    if not output or output == "" then
+        return nil
+    end
+
+    local ok, decoded =
+        pcall(
+            hs.json.decode,
+            output
+        )
+
+    if ok and type(decoded) == "table" then
+        return decoded
+    end
+
+    return nil
+end
+
+
+local function addBrowserBookmark(
+    results,
+    bundleID,
+    profileName,
+    title,
+    url,
+    folderPath
+)
+
+    if type(url) ~= "string"
+        or url == ""
+    then
+        return
+    end
+
+    title =
+        tostring(title or ""):gsub(
+            "[\r\n\t]+",
+            " "
+        )
+
+    if title == "" then
+        title = url
+    end
+
+    local browserName =
+        getBrowserName(bundleID)
+
+    local location = folderPath
+
+    if location == nil
+        or location == ""
+    then
+        location = profileName
+    elseif profileName
+        and profileName ~= ""
+    then
+        location =
+            profileName
+            .. "  •  "
+            .. location
+    end
+
+    local subText =
+        browserName
+        .. "  •  Bookmark"
+
+    if location and location ~= "" then
+        subText =
+            subText
+            .. "  •  "
+            .. location
+    end
+
+    subText =
+        subText
+        .. "  •  "
+        .. url
+
+    table.insert(
+        results,
+        {
+            text = title,
+            subText = subText,
+            kind = "browser_link",
+            target = url,
+            browserBundleID = bundleID
+        }
+    )
+end
+
+
+local function collectBrowserBookmarkNodes(
+    node,
+    folderPath,
+    results,
+    bundleID,
+    profileName,
+    limit
+)
+
+    if #results >= limit
+        or type(node) ~= "table"
+    then
+        return
+    end
+
+    --------------------------------------------------
+    -- Chromium bookmark format
+    -- type = "url", name, url
+    --
+    -- Safari WebBookmark format
+    -- URLString, Title, Children
+    --------------------------------------------------
+
+    local url =
+        node.url
+        or node.URLString
+
+    local title =
+        node.name
+        or node.Title
+        or node.title
+
+    if type(url) == "string"
+        and url ~= ""
+    then
+        addBrowserBookmark(
+            results,
+            bundleID,
+            profileName,
+            title,
+            url,
+            folderPath
+        )
+    end
+
+
+    local children =
+        node.children
+        or node.Children
+
+    if type(children) ~= "table" then
+        return
+    end
+
+
+    local nextFolder =
+        folderPath
+
+    local folderName =
+        node.name
+        or node.Title
+        or node.title
+
+    local nodeType =
+        node.type
+        or node.WebBookmarkType
+
+
+    if folderName
+        and folderName ~= ""
+        and nodeType ~= "url"
+    then
+        if nextFolder
+            and nextFolder ~= ""
+        then
+            nextFolder =
+                nextFolder
+                .. "  ›  "
+                .. tostring(folderName)
+        else
+            nextFolder =
+                tostring(folderName)
+        end
+    end
+
+
+    for _, child in ipairs(children) do
+        collectBrowserBookmarkNodes(
+            child,
+            nextFolder,
+            results,
+            bundleID,
+            profileName,
+            limit
+        )
+
+        if #results >= limit then
+            return
+        end
+    end
+end
+
+
+local function loadBrowserBookmarks(
+    bundleID,
+    profile
+)
+
+    local results = {}
+
+    if not profile
+        or not profile.bookmarks
+    then
+        return results
+    end
+
+
+    local plistMode =
+        bundleID == "com.apple.Safari"
+
+    local data =
+        decodeBrowserJSON(
+            profile.bookmarks,
+            plistMode
+        )
+
+    if not data then
+        return results
+    end
+
+
+    local roots =
+        data.roots
+
+    if type(roots) == "table" then
+        for _, root in pairs(roots) do
+            collectBrowserBookmarkNodes(
+                root,
+                "",
+                results,
+                bundleID,
+                profile.name,
+                1000
+            )
+
+            if #results >= 1000 then
+                break
+            end
+        end
+
+        return results
+    end
+
+
+    --------------------------------------------------
+    -- Safari's plist structure uses Children.
+    --------------------------------------------------
+
+    if type(data.Children) == "table" then
+        collectBrowserBookmarkNodes(
+            data,
+            "",
+            results,
+            bundleID,
+            profile.name,
+            1000
+        )
+
+        return results
+    end
+
+
+    --------------------------------------------------
+    -- Generic fallback.
+    --------------------------------------------------
+
+    collectBrowserBookmarkNodes(
+        data,
+        "",
+        results,
+        bundleID,
+        profile.name,
+        1000
+    )
+
+    return results
+end
+
+
+local function runBrowserSQLiteJSON(
+    databasePath,
+    query
+)
+
+    if not databasePath
+        or not query
+    then
+        return nil
+    end
+
+    local command =
+        "/usr/bin/sqlite3 -readonly -json "
+        .. shellQuote(databasePath)
+        .. " "
+        .. shellQuote(query)
+        .. " 2>/dev/null"
+
+    local output =
+        hs.execute(command)
+
+    if not output or output == "" then
+        return nil
+    end
+
+    local ok, decoded =
+        pcall(
+            hs.json.decode,
+            output
+        )
+
+    if ok and type(decoded) == "table" then
+        return decoded
+    end
+
+    return nil
+end
+
+
+local function addBrowserHistory(
+    results,
+    bundleID,
+    profileName,
+    title,
+    url
+)
+
+    if type(url) ~= "string"
+        or url == ""
+    then
+        return
+    end
+
+    title =
+        tostring(title or ""):gsub(
+            "[\r\n\t]+",
+            " "
+        )
+
+    if title == "" then
+        title = url
+    end
+
+    local browserName =
+        getBrowserName(bundleID)
+
+    local subText =
+        browserName
+        .. "  •  History"
+
+    if profileName
+        and profileName ~= ""
+    then
+        subText =
+            subText
+            .. "  •  "
+            .. profileName
+    end
+
+    subText =
+        subText
+        .. "  •  "
+        .. url
+
+    table.insert(
+        results,
+        {
+            text = title,
+            subText = subText,
+            kind = "browser_link",
+            target = url,
+            browserBundleID = bundleID
+        }
+    )
+end
+
+
+local function loadBrowserHistory(
+    bundleID,
+    profile
+)
+
+    local results = {}
+
+    if not profile
+        or not profile.history
+    then
+        return results
+    end
+
+
+    local rows
+
+
+    --------------------------------------------------
+    -- Safari History.db
+    --------------------------------------------------
+
+    if bundleID == "com.apple.Safari" then
+        rows =
+            runBrowserSQLiteJSON(
+                profile.history,
+                [[
+                    SELECT
+                        COALESCE(
+                            history_visits.title,
+                            ''
+                        ) AS title,
+                        history_items.url AS url,
+                        MAX(
+                            history_visits.visit_time
+                        ) AS last_visit
+                    FROM history_items
+                    LEFT JOIN history_visits
+                        ON history_items.id =
+                           history_visits.history_item
+                    WHERE history_items.url IS NOT NULL
+                    GROUP BY history_items.id
+                    ORDER BY last_visit DESC
+                    LIMIT 2000;
+                ]]
+            )
+
+    else
+        --------------------------------------------------
+        -- Chromium History database.
+        --------------------------------------------------
+
+        rows =
+            runBrowserSQLiteJSON(
+                profile.history,
+                [[
+                    SELECT
+                        COALESCE(title, '') AS title,
+                        url,
+                        last_visit_time AS last_visit
+                    FROM urls
+                    WHERE url IS NOT NULL
+                      AND url != ''
+                    ORDER BY last_visit_time DESC
+                    LIMIT 2000;
+                ]]
+            )
+    end
+
+
+    if type(rows) ~= "table" then
+        return results
+    end
+
+
+    for _, row in ipairs(rows) do
+        addBrowserHistory(
+            results,
+            bundleID,
+            profile.name,
+            row.title,
+            row.url
+        )
+    end
+
+
+    return results
+end
+
+
+local function loadBrowserSearchChoices(app)
+    local bookmarks = {}
+    local history = {}
+
+    local bundleID =
+        getSupportedBrowserBundleID(app)
+
+    if not bundleID then
+        return bookmarks, history
+    end
+
+
+    local profiles =
+        getBrowserProfileFiles(bundleID)
+
+    for _, profile in ipairs(profiles) do
+
+        local profileBookmarks =
+            loadBrowserBookmarks(
+                bundleID,
+                profile
+            )
+
+        for _, choice in ipairs(profileBookmarks) do
+            table.insert(
+                bookmarks,
+                choice
+            )
+        end
+
+
+        local profileHistory =
+            loadBrowserHistory(
+                bundleID,
+                profile
+            )
+
+        for _, choice in ipairs(profileHistory) do
+            table.insert(
+                history,
+                choice
+            )
+        end
+    end
+
+
+    table.sort(
+        bookmarks,
+        function(a, b)
+            return a.text:lower()
+                < b.text:lower()
+        end
+    )
+
+
+    return bookmarks, history
+end
+
+
+local function browserChoiceMatches(
+    choice,
+    search
+)
+
+    local title =
+        tostring(
+            choice.text or ""
+        ):lower()
+
+    local subtitle =
+        tostring(
+            choice.subText or ""
+        ):lower()
+
+    return title:find(
+        search,
+        1,
+        true
+    ) ~= nil
+
+        or subtitle:find(
+            search,
+            1,
+            true
+        ) ~= nil
+end
+
 --------------------------------------------------
 -- Direct URL / File / Folder input
 --------------------------------------------------
@@ -624,6 +1345,40 @@ local function executeChoice(choice)
 
 
     --------------------------------------------------
+    -- Browser history / bookmark
+    --------------------------------------------------
+
+    if choice.kind == "browser_link" then
+
+        local target =
+            choice.target
+
+        local bundleID =
+            choice.browserBundleID
+
+        if target
+            and bundleID
+        then
+
+            local command =
+                "/usr/bin/open -b "
+                .. shellQuote(bundleID)
+                .. " "
+                .. shellQuote(target)
+
+            hs.timer.doAfter(
+                0.05,
+                function()
+                    hs.execute(command)
+                end
+            )
+        end
+
+        return
+    end
+
+
+    --------------------------------------------------
     -- Generic keyboard command
     --------------------------------------------------
 
@@ -704,6 +1459,20 @@ local function showCommandPalette()
 
 
     activeApp = app
+
+
+    --------------------------------------------------
+    -- Browser bookmarks / history
+    --------------------------------------------------
+
+    browserBookmarkChoices = {}
+    browserHistoryChoices = {}
+
+    if getSupportedBrowserBundleID(app) then
+        browserBookmarkChoices,
+        browserHistoryChoices =
+            loadBrowserSearchChoices(app)
+    end
 
 
     --------------------------------------------------
@@ -967,6 +1736,56 @@ then
         )
     end
 end
+
+
+                        --------------------------------------------------
+                        -- Search browser bookmarks/history
+                        --
+                        -- Commands remain first.
+                        -- Browser bookmarks/history come next.
+                        -- Finder results are unaffected because
+                        -- this block only runs for browser apps.
+                        --------------------------------------------------
+
+                        if getSupportedBrowserBundleID(activeApp) then
+
+                            for _, choice in
+                                ipairs(browserBookmarkChoices)
+                            do
+
+                                if browserChoiceMatches(
+                                    choice,
+                                    search
+                                )
+                                then
+
+                                    table.insert(
+                                        filtered,
+                                        choice
+                                    )
+                                end
+                            end
+
+
+                            for _, choice in
+                                ipairs(browserHistoryChoices)
+                            do
+
+                                if browserChoiceMatches(
+                                    choice,
+                                    search
+                                )
+                                then
+
+                                    table.insert(
+                                        filtered,
+                                        choice
+                                    )
+                                end
+                            end
+
+                        end
+
 
                         --------------------------------------------------
                         -- Direct URL / file / folder fallback
