@@ -34,7 +34,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -58,7 +58,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -112,7 +112,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     },
                                     {
@@ -149,7 +149,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     },
                                     {
@@ -215,7 +215,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     },
                                     {
@@ -251,7 +251,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     },
                                     {
@@ -502,7 +502,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -531,7 +531,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -560,7 +560,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -589,7 +589,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -618,7 +618,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -642,7 +642,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -666,7 +666,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
@@ -690,7 +690,7 @@
                                         "value": 1
                                     },
                                     {
-                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*'",
+                                        "expression": "accessibility.focused_ui_element.role_string like 'AXText*' or accessibility.focused_ui_element.subrole_string == 'AXSearchField'",
                                         "type": "expression_unless"
                                     }
                                 ],
